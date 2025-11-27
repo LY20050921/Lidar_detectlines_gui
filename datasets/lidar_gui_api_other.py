@@ -17,6 +17,8 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 # 导入API客户端模块
 from api_client import api_client
+# 导入图片预览组件
+from gui_api_adapter import ImagePreviewWidget
 
 
 class WorkerThread(QThread):
@@ -119,12 +121,11 @@ class MainPage(QWidget):
         result_panel = QWidget()
         result_layout = QVBoxLayout(result_panel)
         
-        # 结果显示标签
-        self.result_label = QLabel("结果显示区域")
-        self.result_label.setAlignment(Qt.AlignCenter)
-        self.result_label.setMinimumHeight(400)
-        self.result_label.setFrameShape(QFrame.Panel)
-        self.result_label.setFrameShadow(QFrame.Sunken)
+        # 结果预览组件
+        self.preview_widget = ImagePreviewWidget()
+        self.preview_widget.setMinimumHeight(400)
+        self.preview_widget.setFrameShape(QFrame.Panel)
+        self.preview_widget.setFrameShadow(QFrame.Sunken)
         
         # 结果信息区域
         self.info_label = QLabel("信息显示区域")
@@ -135,7 +136,7 @@ class MainPage(QWidget):
         
         # 添加到结果面板布局
         result_layout.addWidget(QLabel("预览结果:"))
-        result_layout.addWidget(self.result_label)
+        result_layout.addWidget(self.preview_widget)
         result_layout.addWidget(QLabel("处理信息:"))
         result_layout.addWidget(self.info_label)
         
@@ -184,15 +185,8 @@ class MainPage(QWidget):
         """
         # 显示图片
         if image_path and os.path.exists(image_path):
-            pixmap = QPixmap(image_path)
-            if not pixmap.isNull():
-                self.result_label.setPixmap(
-                    pixmap.scaled(
-                        self.result_label.size(), 
-                        Qt.KeepAspectRatio, 
-                        Qt.SmoothTransformation
-                    )
-                )
+            # 使用预览组件加载图片
+            self.preview_widget.load_image(image_path)
         
         # 显示信息
         self.info_label.setText(info_text)

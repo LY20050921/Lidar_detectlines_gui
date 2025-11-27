@@ -16,6 +16,8 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize, QEvent
 from api_client import api_client
 # 导入线段编辑器组件
 from line_editor_qt import TestWindow, LineSegment, LineSegments
+# 导入图片预览组件
+#from image_preview_widget import ImagePreviewWidget
 
 
 class WorkerThread(QThread):
@@ -49,27 +51,27 @@ class WorkerThread(QThread):
             self.error.emit(str(e))
 
 
-class ImagePreviewDialog(QDialog):
-    """图片预览对话框，支持鼠标移动和滚轮缩放"""
-    def __init__(self, image_path, parent=None):
+class ImagePreviewWidget(QWidget):
+    """图片预览控件，支持鼠标移动和滚轮缩放，用于嵌入到现有界面中"""
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.image_path = image_path
+        self.image_path = None
         self.init_ui()
         self.setup_connections()
-        
+        # 添加深色背景样式
+        self.setStyleSheet("background-color: #2c2c2c;")
+
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("图片预览")
-        self.resize(1000, 800)
-        
         # 创建主布局
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
         # 创建滚动区域
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(False)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 禁用水平滚动条
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)    # 禁用垂直滚动条
         self.scroll_area.setFocusPolicy(Qt.WheelFocus)  # 确保滚轮事件能被正确捕获
         self.scroll_area.setWidgetResizable(False)  # 由我们手动控制尺寸
         
@@ -86,10 +88,8 @@ class ImagePreviewDialog(QDialog):
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMouseTracking(True)
+        self.image_label.setScaledContents(True)  # 确保图片填充整个标签
         container_layout.addWidget(self.image_label)
-        
-        # 加载图片
-        self.load_image()
         
         # 添加滚动区域到主布局
         main_layout.addWidget(self.scroll_area)
@@ -107,22 +107,99 @@ class ImagePreviewDialog(QDialog):
         # 为滚动区域的视口添加事件过滤器
         self.scroll_area.viewport().installEventFilter(self)
         self.image_label.installEventFilter(self)
+        
+        # 确保控件可以接收键盘事件
+        self.setFocusPolicy(Qt.WheelFocus)
     
-    def load_image(self):
-        """加载并显示图片"""
+    def load_image(self, image_path=None):
+        """加载并显示图片
+        
+        Args:
+            image_path: 可选，要加载的图片路径。如果为None，则使用当前已设置的路径
+        """
+        # 如果提供了新的图片路径，则更新
+        if image_path is not None:
+            self.image_path = image_path
+        
         if not self.image_path or not os.path.exists(self.image_path):
-            QMessageBox.warning(self, "错误", "图片文件不存在")
-            return
+            print(f"错误: 图片文件不存在: {self.image_path}")
+            return False
         
         # 加载图片
         self.pixmap = QPixmap(self.image_path)
         if self.pixmap.isNull():
-            QMessageBox.warning(self, "错误", "无法加载图片")
+            print("错误: 无法加载图片")
+            return False
+        
+        # 设置初始缩放因子为一个大于1.0的值，模拟已使用滚轮放大的效果
+        # 这里设置为1.5倍，使图片加载时就已经被放大
+        self.scale_factor = 1.8
+        
+        # 初始加载时自适应显示
+        self.fit_to_view()
+        
+        # 更新滚动条策略
+        self.update_scroll_policies()
+        return True
+        
+    def fit_to_view(self):
+        """将图片自适应显示到预览区域，确保完全撑满预览框"""
+        if not hasattr(self, 'pixmap') or self.pixmap.isNull():
             return
         
-        # 显示原始大小的图片
-        self.image_label.setPixmap(self.pixmap)
-        self.image_container.resize(self.pixmap.size())
+        # 获取预览区域的可用尺寸（使用滚动区域视口的尺寸）
+        viewport_size = self.scroll_area.viewport().size()
+        # 如果视口尺寸过小，使用一个最小尺寸
+        if viewport_size.width() < 100 or viewport_size.height() < 100:
+            viewport_size = QSize(800, 600)  # 默认尺寸
+        
+        # 计算基础缩放因子，确保图片完全撑满预览框
+        image_size = self.pixmap.size()
+        width_ratio = viewport_size.width() / image_size.width()
+        height_ratio = viewport_size.height() / image_size.height()
+        base_scale = max(width_ratio, height_ratio)
+        
+        # 应用预先设置的放大倍数（在load_image中设置的self.scale_factor）
+        # 这里我们将基础缩放因子乘以预先设置的缩放因子
+        scale_factor = base_scale * self.scale_factor
+        
+        # 限制缩放范围
+        scale_factor = max(self.min_scale, min(self.max_scale, scale_factor))
+        
+        # 应用缩放
+        self.apply_scale(scale_factor)
+    
+    def reset_zoom(self):
+        """重置缩放，显示原始大小"""
+        self.apply_scale(1.0)
+    
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        # 空格键重置缩放
+        if event.key() == Qt.Key_Space:
+            self.reset_zoom()
+            return True
+        # F键适应窗口
+        elif event.key() == Qt.Key_F:
+            self.fit_to_view()
+            return True
+        # 方向键移动
+        elif event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+            h_bar = self.scroll_area.horizontalScrollBar()
+            v_bar = self.scroll_area.verticalScrollBar()
+            step = 20  # 滚动步长
+            
+            if event.key() == Qt.Key_Up:
+                v_bar.setValue(v_bar.value() - step)
+            elif event.key() == Qt.Key_Down:
+                v_bar.setValue(v_bar.value() + step)
+            elif event.key() == Qt.Key_Left:
+                h_bar.setValue(h_bar.value() - step)
+            elif event.key() == Qt.Key_Right:
+                h_bar.setValue(h_bar.value() + step)
+            return True
+        
+        return super().keyPressEvent(event)
     
     def setup_connections(self):
         """设置信号连接"""
@@ -167,23 +244,23 @@ class ImagePreviewDialog(QDialog):
             self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
     
     def apply_scale(self, scale_factor):
-        """应用缩放因子"""
+        """应用缩放因子，基于原图尺寸进行缩放"""
         if not hasattr(self, 'pixmap') or self.pixmap.isNull():
             return
         
         self.scale_factor = scale_factor
         
-        # 计算新的图片尺寸
+        # 计算新的图片尺寸（基于原图大小乘以缩放因子）
         scaled_size = self.pixmap.size() * scale_factor
         
-        # 缩放图片
+        # 缩放图片，保持宽高比
         scaled_pixmap = self.pixmap.scaled(
             scaled_size,
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation
         )
         
-        # 更新图片标签
+        # 更新图片标签和容器
         self.image_label.setPixmap(scaled_pixmap)
         self.image_container.resize(scaled_size)
         
@@ -222,6 +299,33 @@ class ImagePreviewDialog(QDialog):
             self.is_dragging = False
             self.last_pos = None
     
+    def eventFilter(self, obj, event):
+        """事件过滤器，处理鼠标事件和滚轮事件"""
+        # 处理滚轮事件
+        if event.type() == QEvent.Wheel and obj == self.scroll_area.viewport():
+            self.wheelEvent(event)
+            return True
+        
+        # 处理鼠标事件
+        if obj == self.image_label or obj == self.scroll_area.viewport():
+            if event.type() == QEvent.MouseButtonPress:
+                self.mousePressEvent(event)
+                return True
+            elif event.type() == QEvent.MouseMove:
+                self.mouseMoveEvent(event)
+                return True
+            elif event.type() == QEvent.MouseButtonRelease:
+                self.mouseReleaseEvent(event)
+                return True
+        
+        return super().eventFilter(obj, event)
+    
+    def resizeEvent(self, event):
+        """处理窗口调整事件"""
+        super().resizeEvent(event)
+        # 更新滚动条策略
+        self.update_scroll_policies()
+
     def eventFilter(self, obj, event):
         """事件过滤器，处理鼠标事件和滚轮事件"""
         # 处理滚轮事件
@@ -782,66 +886,16 @@ class GUIApiAdapter:
             # 设置尺寸策略
             target_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             
-            # 用于存储是否找到并更新了现有标签
-            label_updated = False
-            
-            # 如果已经有QLabel子控件，使用它
-            for child in target_widget.findChildren(QLabel):
-                # 检查是否是图片标签或显示图片的标签
-                if child.pixmap() or child.objectName() == "result_image_label":
-                    # 更新现有标签
-                    child.setObjectName("result_image_label")
-                    child.setAlignment(Qt.AlignCenter)
-                    child.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                    child.setCursor(Qt.PointingHandCursor)  # 鼠标悬停显示手型
-                    
-                    # 确保使用完整的控件尺寸
-                    target_size = target_widget.size()
-                    if target_size.width() <= 0 or target_size.height() <= 0:
-                        target_size = QSize(800, 600)
-                    
-                    # 缩放到适合的大小
-                    scaled_pixmap = pixmap.scaled(
-                        target_size,
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    )
-                    
-                    child.setPixmap(scaled_pixmap)
-                    # 添加点击事件
-                    child.mousePressEvent = lambda event, path=image_path: self._show_image_preview(path)
-                    print(f"更新现有图片标签: {child}")
-                    label_updated = True
+            # 检查是否已经有ImagePreviewWidget
+            existing_preview_widget = None
+            for child in target_widget.findChildren(QWidget):
+                if isinstance(child, ImagePreviewWidget):
+                    existing_preview_widget = child
+                    print(f"找到现有的ImagePreviewWidget: {child}")
                     break
             
-            # 如果没有更新现有标签，创建新的QLabel
-            if not label_updated:
-                # 创建新的图片标签
-                image_label = QLabel(target_widget)
-                image_label.setObjectName("result_image_label")
-                image_label.setAlignment(Qt.AlignCenter)
-                image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                image_label.setCursor(Qt.PointingHandCursor)  # 鼠标悬停显示手型
-                
-                # 添加点击事件
-                image_label.mousePressEvent = lambda event, path=image_path: self._show_image_preview(path)
-                
-                # 确保使用完整的控件尺寸
-                target_size = target_widget.size()
-                if target_size.width() <= 0 or target_size.height() <= 0:
-                    # 如果控件还没有实际尺寸，使用一个合理的默认值
-                    target_size = QSize(800, 600)
-                    print("控件尺寸无效，使用默认尺寸")
-                
-                # 缩放到适合的大小
-                scaled_pixmap = pixmap.scaled(
-                    target_size,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
-                )
-                
-                image_label.setPixmap(scaled_pixmap)
-                
+            # 如果没有现有的ImagePreviewWidget，创建一个新的
+            if not existing_preview_widget:
                 # 检查是否有布局，如果没有就创建一个
                 layout = target_widget.layout()
                 if not layout:
@@ -857,34 +911,25 @@ class GUIApiAdapter:
                             item.widget().deleteLater()
                     print("使用现有布局并清空内容")
                 
-                # 添加图片标签到布局
-                layout.addWidget(image_label)
-                print("创建新的图片标签并添加到目标控件")
+                # 创建新的ImagePreviewWidget
+                preview_widget = ImagePreviewWidget(target_widget)
+                preview_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                
+                # 添加到布局
+                layout.addWidget(preview_widget)
+                print("创建新的ImagePreviewWidget并添加到目标控件")
+                existing_preview_widget = preview_widget
             
-            # 确保控件和标签可见
+            # 使用ImagePreviewWidget加载图片
+            existing_preview_widget.load_image(image_path)
+            print(f"已使用ImagePreviewWidget加载图片: {image_path}")
+            
+            # 确保控件可见
             target_widget.show()
             
             # 保存图片路径到页面
             page._last_image_path = image_path
-            print("图片已成功显示在布局中")
-            
-            # 添加一个sizePolicyChanged信号连接，确保窗口调整大小时图片也跟着调整
-            def resize_image(event):
-                # 查找当前的图片标签
-                for child in target_widget.findChildren(QLabel):
-                    if child.objectName() == "result_image_label" and child.pixmap():
-                        current_pixmap = child.pixmap()
-                        new_size = child.size()
-                        if new_size.width() > 0 and new_size.height() > 0:
-                            scaled = current_pixmap.scaled(
-                                new_size,
-                                Qt.KeepAspectRatio,
-                                Qt.SmoothTransformation
-                            )
-                            child.setPixmap(scaled)
-                        break
-            
-            target_widget.resizeEvent = resize_image
+            print("图片已成功显示在预览控件中")
             print(f"已关联图片显示控件与预览对话框: {image_path}")
         else:
             # 如果没有找到特定的显示控件，尝试查找页面上的QFrame或其他容器
@@ -1024,13 +1069,13 @@ class GUIApiAdapter:
         page._last_info_text = info_text
     
     def _show_image_preview(self, image_path):
-        """显示图片预览对话框
+        """在右侧预览区域显示图片，支持缩放和拖动
         
         Args:
             image_path: 要预览的图片路径
         """
         try:
-            print(f"显示图片预览对话框，路径: {image_path}")
+            print(f"在预览区域显示图片，路径: {image_path}")
             
             # 确保路径存在
             if not os.path.exists(image_path):
@@ -1067,30 +1112,113 @@ class GUIApiAdapter:
                         return
                     image_path = found_path
             
-            try:
-                # 使用已经定义的ImagePreviewDialog类创建预览对话框
-                parent_widget = self.current_page if hasattr(self, 'current_page') and self.current_page is not None else None
-                preview_dialog = ImagePreviewDialog(image_path, parent_widget)
-                # 设置模态对话框
-                preview_dialog.exec_()
-                print("图片预览对话框已关闭")
-            except RuntimeError as e:
-                # 特殊处理Qt对象已被删除的错误
-                if "wrapped C/C++ object" in str(e):
-                    print(f"警告: Qt对象已被删除: {str(e)}")
+            # 检查当前页面是否存在
+            if not hasattr(self, 'current_page') or self.current_page is None:
+                print("当前页面不存在，无法在预览区域显示图片")
+                # 作为后备方案，使用对话框显示
+                self._show_image_dialog(image_path)
+                return
+            
+            # 查找预览区域控件
+            target_widget = None
+            preview_widgets = [
+                # 优先查找canvas_widget
+                getattr(self.current_page, 'canvas_widget', None),
+                # 其次查找preview_panel
+                getattr(self.current_page, 'preview_panel', None),
+                # 然后查找任何名称包含preview的控件
+                next((w for w in self.current_page.findChildren(QWidget) if w.objectName() and 'preview' in w.objectName().lower()), None),
+                # 最后查找任何名称包含canvas的控件
+                next((w for w in self.current_page.findChildren(QWidget) if w.objectName() and 'canvas' in w.objectName().lower()), None)
+            ]
+            
+            # 找到第一个有效的预览控件
+            for widget in preview_widgets:
+                if widget is not None:
+                    target_widget = widget
+                    break
+            
+            if target_widget is not None:
+                print(f"找到预览区域控件: {target_widget}")
+                
+                # 检查是否已经有ImagePreviewWidget实例
+                existing_preview = None
+                for child in target_widget.findChildren(ImagePreviewWidget):
+                    existing_preview = child
+                    break
+                
+                if existing_preview is not None:
+                    # 如果已有预览控件，直接加载新图片
+                    print("使用现有预览控件")
+                    existing_preview.load_image(image_path)
                 else:
-                    raise
-            except Exception as e:
-                print(f"显示图片预览对话框时出错: {str(e)}")
-                try:
-                    if hasattr(self, 'current_page') and self.current_page is not None:
-                        QMessageBox.warning(self.current_page, "错误", f"无法显示图片预览: {str(e)}")
+                    # 清除目标控件中的现有内容
+                    layout = target_widget.layout()
+                    if layout:
+                        while layout.count() > 0:
+                            item = layout.takeAt(0)
+                            if item.widget():
+                                item.widget().deleteLater()
                     else:
-                        QMessageBox.warning(None, "错误", f"无法显示图片预览: {str(e)}")
-                except RuntimeError:
-                    print(f"无法显示错误消息对话框")
+                        # 创建新的布局
+                        layout = QVBoxLayout(target_widget)
+                        layout.setContentsMargins(0, 0, 0, 0)
+                        layout.setSpacing(0)
+                    
+                    # 创建新的ImagePreviewWidget实例
+                    print("创建新的预览控件")
+                    preview_widget = ImagePreviewWidget(target_widget)
+                    preview_widget.load_image(image_path)
+                    
+                    # 将预览控件添加到布局
+                    layout.addWidget(preview_widget)
+                    
+                    # 设置预览控件的尺寸策略，使其充满整个预览区域
+                    preview_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                
+                # 保存图片路径到页面
+                self.current_page._last_image_path = image_path
+                print("图片已成功显示在预览区域")
+            else:
+                print("未找到预览区域控件，使用对话框显示")
+                # 作为后备方案，使用对话框显示
+                self._show_image_dialog(image_path)
+                
+        except RuntimeError as e:
+            # 特殊处理Qt对象已被删除的错误
+            if "wrapped C/C++ object" in str(e):
+                print(f"警告: Qt对象已被删除: {str(e)}")
+            else:
+                raise
         except Exception as e:
-            print(f"处理图片预览请求时发生错误: {str(e)}")
+            print(f"显示图片预览时出错: {str(e)}")
+            try:
+                if hasattr(self, 'current_page') and self.current_page is not None:
+                    QMessageBox.warning(self.current_page, "错误", f"无法显示图片预览: {str(e)}")
+                else:
+                    QMessageBox.warning(None, "错误", f"无法显示图片预览: {str(e)}")
+            except RuntimeError:
+                print(f"无法显示错误消息对话框")
+    
+    def _show_image_dialog(self, image_path):
+        """作为后备方案，使用ImagePreviewWidget显示图片
+        
+        Args:
+            image_path: 要预览的图片路径
+        """
+        try:
+            print(f"使用ImagePreviewWidget显示图片预览，路径: {image_path}")
+            # 直接使用_show_image_preview方法，它已经能处理各种情况
+            self._show_image_preview(image_path)
+        except Exception as e:
+            print(f"显示图片预览时出错: {str(e)}")
+            try:
+                if hasattr(self, 'current_page') and self.current_page is not None:
+                    QMessageBox.warning(self.current_page, "错误", f"无法显示图片预览: {str(e)}")
+                else:
+                    QMessageBox.warning(None, "错误", f"无法显示图片预览: {str(e)}")
+            except RuntimeError:
+                print(f"无法显示错误消息对话框")
     
     def eventFilter(self, obj, event):
         """事件过滤器，捕获控件点击事件
