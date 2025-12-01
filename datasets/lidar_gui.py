@@ -45,33 +45,34 @@ class MainPage(QWidget):
         file_layout = QVBoxLayout(file_group)
         file_layout.setSpacing(10)
         
-        # PCD文件选择按钮
-        self.pcd_file_button = QPushButton("请选择PCD文件")
-        self.pcd_file_button.clicked.connect(self.select_pcd_file)
-        self.pcd_file_button.setMinimumHeight(40)  # 增加按钮高度确保文字完全显示
-        self.pcd_file_button.setStyleSheet("""
-            QPushButton {
-                background-color: #555555;
-                color: #CCCCCC;
-                font-size: 14px;
-                font-family: 'SimHei', 'Microsoft YaHei', sans-serif;
-                border: 1px solid #666666;
-                text-align: center;
-                padding: 5px;
-                white-space: normal;
-                min-width: 120px;
-            }
-            QPushButton:hover {
-                background-color: #666666;
-            }
-            QPushButton:pressed {
-                background-color: #333333;
-            }
-        """)
-        file_layout.addWidget(self.pcd_file_button)
+        # PCD文件选择按钮  这里也要修改，只有点云预览有这个pcd选择按钮
+        if self.title not in ["点云投影","直接检测"]:
+            self.pcd_file_button = QPushButton("请选择PCD文件")
+            self.pcd_file_button.clicked.connect(self.select_pcd_file)
+            self.pcd_file_button.setMinimumHeight(40)  # 增加按钮高度确保文字完全显示
+            self.pcd_file_button.setStyleSheet("""
+                QPushButton {
+                    background-color: #555555;
+                    color: #CCCCCC;
+                    font-size: 14px;
+                    font-family: 'SimHei', 'Microsoft YaHei', sans-serif;
+                    border: 1px solid #666666;
+                    text-align: center;
+                    padding: 5px;
+                    white-space: normal;
+                    min-width: 120px;
+                }
+                QPushButton:hover {
+                    background-color: #666666;
+                }
+                QPushButton:pressed {
+                    background-color: #333333;
+                }
+            """)
+            file_layout.addWidget(self.pcd_file_button)
         
-        # 配置文件选择（点云投影和检测页面需要）
-        if self.title not in ["点云预览"]:
+        # 配置文件选择（只有点云预览界面需要）
+        if self.title not in ["点云投影","直接检测"]:   #这里改成别的就不会触发
             self.config_file_button = QPushButton("请选择yaml文件")
             self.config_file_button.clicked.connect(self.select_config_file)
             self.config_file_button.setMinimumHeight(40)  # 增加按钮高度确保文字完全显示
@@ -96,7 +97,9 @@ class MainPage(QWidget):
             """)
             file_layout.addWidget(self.config_file_button)
         
-        control_layout.addWidget(file_group)
+        #这里也进行修改，只在点云预览界面出现文件选择框
+        if self.title not in ["点云投影","直接检测"]:   
+            control_layout.addWidget(file_group)
         
         # 仅点云预览页面有参数设置
         if self.title == "点云预览":
@@ -149,8 +152,15 @@ class MainPage(QWidget):
             
             control_layout.addWidget(params_group)
         
-        # 生成预览/投影按钮
-        action_text = "生成预览" if "预览" in self.title else "生成投影"
+        # 生成预览/投影/线段按钮
+        if "预览" in self.title:
+            action_text="生成预览"
+        elif "投影" in self.title:
+            action_text="生成投影" 
+        elif "检测" in self.title:
+            action_text="生成线段"
+        # action_text = "生成预览" if "预览" in self.title else "生成投影"
+        # action_text = "生成线段" if "检测" in self.title else "生成投影"
         self.generate_button = QPushButton(action_text)
         self.generate_button.setStyleSheet("""
             background-color: #006400;
@@ -160,22 +170,27 @@ class MainPage(QWidget):
             font-weight: bold;
         """)
         # 添加按动效果
-        self.generate_button.setStyleSheet("""
-            QPushButton {
+        if "检测" in self.title or "投影" in self.title:
+            margin="55px"
+        elif "预览" in self.title:
+            margin="5px"
+        self.generate_button.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #006400;
                 color: white;
                 min-height: 40px;
                 font-size: 14px;
                 font-weight: bold;
                 border: 1px solid #008000;
-            }
-            QPushButton:hover {
+                margin-top: {margin};  /* 设置距离上边界的距离为margin像素 */
+            }}
+            QPushButton:hover {{
                 background-color: #007D00;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #004D00;
                 border-color: #003300;
-            }
+            }}
         """)
         
         # 重置参数按钮

@@ -374,6 +374,8 @@ class GUIApiAdapter:
         self.worker = None
         self.progress_dialog = None
         self.connect_signals()
+        self.pcd_file_path = None  #使用全局的路径变量，当点云预览设置了路径，这里也会更新
+        self.config_file_path = None
     
     def connect_signals(self):
         """连接GUI信号和API处理函数"""
@@ -507,6 +509,18 @@ class GUIApiAdapter:
             page.edit_button.clicked.connect(lambda: self.run_line_edit_function(page))
             print("已连接编辑线段功能到编辑线段按钮")
         
+        # 连接重置参数按钮
+        if hasattr(page, 'reset_button'):
+            # 先断开所有现有连接
+            try:
+                page.reset_button.clicked.disconnect()
+                print("已断开重置参数按钮的现有连接")
+            except (TypeError, RuntimeError):
+                pass
+            # 连接到我们的重置参数方法
+            page.reset_button.clicked.connect(lambda: self.reset_page_parameters(page))
+            print("已连接重置参数功能到重置参数按钮")
+        
         print("页面按钮连接完成")
     
     def _check_api_status(self):
@@ -580,6 +594,32 @@ class GUIApiAdapter:
                 )
         
         return None
+    
+    def reset_page_parameters(self, page):
+        """重置页面参数
+        
+        Args:
+            page: 页面实例
+        """
+        print(f"重置页面参数: {page.title if hasattr(page, 'title') else '未知页面'}")
+        
+        # 如果页面自身有reset_parameters方法，调用它
+        if hasattr(page, 'reset_parameters'):
+            try:
+                page.reset_parameters()
+                print("已调用页面自身的reset_parameters方法")
+            except Exception as e:
+                print(f"调用页面reset_parameters方法时出错: {str(e)}")
+        
+        # 重置文件路径字典
+        if hasattr(page, '_file_paths'):
+            page._file_paths = {'pcd': None, 'config': None}
+            print("已重置文件路径字典")
+        
+        # 重置适配器中的全局路径变量
+        self.pcd_file_path = None
+        self.config_file_path = None
+        print("已重置适配器中的全局路径变量")
     
     def _get_cfg_path(self, page):
         """获取配置文件路径
@@ -1326,6 +1366,7 @@ class GUIApiAdapter:
         
         # 获取PCD文件路径
         pcd_path = self._get_file_path(page, 'pcd')
+        self.pcd_file_path = pcd_path
         
         # 详细验证文件路径
         if not pcd_path:
@@ -1340,6 +1381,21 @@ class GUIApiAdapter:
             return
         
         print(f"PCD文件路径：{pcd_path}")
+
+        cfg_path = self._get_file_path(page, 'config')
+        self.cfg_file_path = cfg_path
+        # 详细验证配置文件路径
+        if not cfg_path:
+            QMessageBox.warning(page, "文件路径缺失", "请选择有效的配置文件！")
+            print("配置文件路径获取失败")
+            return
+        
+        if not os.path.exists(cfg_path):
+            QMessageBox.warning(page, "文件不存在", f"配置文件不存在：{cfg_path}")
+            print(f"配置文件不存在：{cfg_path}")
+            return
+        
+        print(f"配置文件路径：{cfg_path}")
         
         # 获取视角参数
         theta = 0.0
@@ -1391,9 +1447,9 @@ class GUIApiAdapter:
         if not self._check_api_status():
             return
         
-        # 获取文件路径
-        pcd_path = self._get_file_path(page, 'pcd')
-        
+        # # 获取文件路径
+        # pcd_path = self._get_file_path(page, 'pcd')
+        pcd_path=self.pcd_file_path
         # 详细验证PCD文件路径
         if not pcd_path:
             QMessageBox.warning(page, "文件路径缺失", "请选择有效的PCD文件！")
@@ -1406,7 +1462,8 @@ class GUIApiAdapter:
             return
         
         # 获取配置文件路径
-        cfg_path = self._get_file_path(page, 'config')
+        #cfg_path = self._get_file_path(page, 'config')
+        cfg_path=self.cfg_file_path
         
         # 详细验证配置文件路径
         if not cfg_path:
@@ -1446,7 +1503,8 @@ class GUIApiAdapter:
             return
         
         # 获取文件路径
-        pcd_path = self._get_file_path(page, 'pcd')
+        #pcd_path = self._get_file_path(page, 'pcd')
+        pcd_path=self.pcd_file_path
         
         # 详细验证PCD文件路径
         if not pcd_path:
@@ -1460,7 +1518,8 @@ class GUIApiAdapter:
             return
         
         # 获取配置文件路径
-        cfg_path = self._get_file_path(page, 'config')
+        #cfg_path = self._get_file_path(page, 'config')
+        cfg_path=self.cfg_file_path
         
         # 详细验证配置文件路径
         if not cfg_path:
