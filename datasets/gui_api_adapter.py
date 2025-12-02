@@ -616,9 +616,10 @@ class GUIApiAdapter:
             page._file_paths = {'pcd': None, 'config': None}
             print("已重置文件路径字典")
         
-        # 重置适配器中的全局路径变量
-        self.pcd_file_path = None
-        self.config_file_path = None
+        # 重置适配器中的全局路径变量,分为在不同的界面的重置按钮
+        if "预览" in page.title:
+            self.pcd_file_path = None
+            self.config_file_path = None
         print("已重置适配器中的全局路径变量")
     
     def _get_cfg_path(self, page):
@@ -1405,8 +1406,8 @@ class GUIApiAdapter:
         voxel_size = 0.01
         
         # 尝试从页面获取参数控件的值
-        if hasattr(page, 'param_spin_boxes'):
-            spin_boxes = page.param_spin_boxes
+        if hasattr(page, 'param_spin_boxes_preview'):
+            spin_boxes = page.param_spin_boxes_preview
             if len(spin_boxes) > 0:
                 theta = spin_boxes[0].value()
             if len(spin_boxes) > 1:

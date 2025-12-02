@@ -15,15 +15,26 @@ class MainPage(QWidget):
         super().__init__(parent)
         self.title = title
         # 存储参数默认值，用于重置功能
-        self.param_defaults = [
+        self.param_defaults_preview = [
             ("方位角(Theta):", 0.0),
             ("仰角(Phi):", 0.0),
             ("观察距离:", 2.0),
             ("背景色:", 0.0),
-            ("下采样大小:", 0.0)
+            ("下采样大小:", 0.1)
+        ]
+
+        # 点云投影页面参数默认值
+        self.param_defaults_projection = [
+            ("线条粗细:", 10.0)
+        ]
+        # 直接检测默认参数值
+        self.param_defaults_detect = [
+            ("检测最短线段长度:", 30.0)
         ]
         # 存储参数控件引用
-        self.param_spin_boxes = []
+        self.param_spin_boxes_preview = []
+        self.param_spin_boxes_projection = []
+        self.param_spin_boxes_detect = []
         self.initUI()
     
     def initUI(self):
@@ -113,7 +124,7 @@ class MainPage(QWidget):
                 ("仰角(Phi):", 0.0, -90.0, 90.0, 0.1),
                 ("观察距离:", 2.0, 0.1, 100.0, 0.1),
                 ("背景色:", 0.0, 0.0, 1.0, 0.1),
-                ("下采样大小:", 0.0, 0.0, 1.0, 0.01)
+                ("下采样大小:", 0.1, 0.0, 1.0, 0.1)
             ]
             
             for label_text, default_value, min_val, max_val, step in angle_params:
@@ -148,11 +159,103 @@ class MainPage(QWidget):
                 params_layout.addLayout(param_layout)
                 params_layout.addSpacing(5)  # 增加每个参数之间的间距
                 # 保存参数控件引用，用于重置功能
-                self.param_spin_boxes.append(spin_box)
+                self.param_spin_boxes_preview.append(spin_box)
             
             control_layout.addWidget(params_group)
         
-        # 生成预览/投影/线段按钮
+        elif self.title == "点云投影":
+            params_group = QGroupBox("参数设置")
+            params_layout = QVBoxLayout(params_group)
+            params_layout.setSpacing(8)
+            
+            # 视角参数
+            angle_params = [
+                ("线条粗细(Scale):", 10.0, 1.0, 100.0, 1.0)
+            ]
+            
+            for label_text, default_value, min_val, max_val, step in angle_params:
+                param_layout = QHBoxLayout()
+                param_layout.setSpacing(8)
+                label = QLabel(label_text)
+                label.setMinimumWidth(120)  # 增加标签宽度，确保文字完全显示
+                label.setMaximumWidth(120)
+                label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)  # 右对齐
+                label.setStyleSheet("font-size: 14px; font-family: 'SimHei', 'Microsoft YaHei', sans-serif; color: #FFFFFF;")
+                spin_box = QDoubleSpinBox()
+                spin_box.setDecimals(4)  # 设置小数位数
+                spin_box.setRange(min_val, max_val)  # 设置范围
+                spin_box.setSingleStep(step)  # 设置步长
+                spin_box.setValue(float(default_value))  # 设置默认值
+                spin_box.setMinimumWidth(120)  # 增加宽度
+                spin_box.setStyleSheet("""
+                    QDoubleSpinBox {
+                        background-color: #444444;
+                        border: 1px solid #666666;
+                        padding: 6px 8px;
+                        color: #FFFFFF;
+                        font-size: 14px;
+                        min-height: 28px;
+                    }
+                    QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+                        width: 20px;
+                    }
+                """)
+                param_layout.addWidget(label)
+                param_layout.addWidget(spin_box)
+                params_layout.addLayout(param_layout)
+                params_layout.addSpacing(5)  # 增加每个参数之间的间距
+                # 保存参数控件引用，用于重置功能
+                self.param_spin_boxes_projection.append(spin_box)
+            
+            control_layout.addWidget(params_group)
+
+        elif self.title == "直接检测":
+            params_group = QGroupBox("参数设置")
+            params_layout = QVBoxLayout(params_group)
+            params_layout.setSpacing(8)
+            
+            # 视角参数
+            angle_params = [
+                ("检测最短线段长度:", 30.0, 20.0, 100.0, 1.0)
+            ]
+            
+            for label_text, default_value, min_val, max_val, step in angle_params:
+                param_layout = QHBoxLayout()
+                param_layout.setSpacing(8)
+                label = QLabel(label_text)
+                label.setMinimumWidth(120)  # 增加标签宽度，确保文字完全显示
+                label.setMaximumWidth(120)
+                label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)  # 右对齐
+                label.setStyleSheet("font-size: 14px; font-family: 'SimHei', 'Microsoft YaHei', sans-serif; color: #FFFFFF;")
+                spin_box = QDoubleSpinBox()
+                spin_box.setDecimals(4)  # 设置小数位数
+                spin_box.setRange(min_val, max_val)  # 设置范围
+                spin_box.setSingleStep(step)  # 设置步长
+                spin_box.setValue(float(default_value))  # 设置默认值
+                spin_box.setMinimumWidth(120)  # 增加宽度
+                spin_box.setStyleSheet("""
+                    QDoubleSpinBox {
+                        background-color: #444444;
+                        border: 1px solid #666666;
+                        padding: 6px 8px;
+                        color: #FFFFFF;
+                        font-size: 14px;
+                        min-height: 28px;
+                    }
+                    QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+                        width: 20px;
+                    }
+                """)
+                param_layout.addWidget(label)
+                param_layout.addWidget(spin_box)
+                params_layout.addLayout(param_layout)
+                params_layout.addSpacing(5)  # 增加每个参数之间的间距
+                # 保存参数控件引用，用于重置功能
+                self.param_spin_boxes_detect.append(spin_box)
+            
+            control_layout.addWidget(params_group)
+        
+        # 生成预览/投影/检测按钮
         if "预览" in self.title:
             action_text="生成预览"
         elif "投影" in self.title:
@@ -252,7 +355,12 @@ class MainPage(QWidget):
         self.canvas_widget.setMinimumHeight(800)
         
         # 默认提示文本
-        default_text = "请选择PCD文件并点击生成预览" if "预览" in self.title else "请选择PCD文件并点击生成投影"
+        if "预览" in self.title:
+            default_text = "请选择PCD文件并点击生成预览"
+        elif "投影" in self.title:
+            default_text = "请选择PCD文件并点击生成投影"
+        elif "直接检测" in self.title:
+            default_text = "请选择PCD文件并点击直接检测"
         self.hint_label = QLabel(default_text)
         self.hint_label.setAlignment(Qt.AlignCenter)
         self.hint_label.setStyleSheet("color: #AAAAAA; font-size: 14px; padding: 10px;")
@@ -334,17 +442,39 @@ class MainPage(QWidget):
             if hasattr(self, 'config_file_button'):
                 self.config_file_button.setText("请选择yaml文件")
             
-            # 重置参数设置区域的所有参数（如果是点云预览页面）
-            if self.title == "点云预览" and hasattr(self, 'param_spin_boxes') and self.param_spin_boxes:
-                for i, spin_box in enumerate(self.param_spin_boxes):
-                    if i < len(self.param_defaults):
+            # 重置参数设置区域的所有参数
+            # 点云预览页面
+            if self.title == "点云预览" and hasattr(self, 'param_spin_boxes_preview') and self.param_spin_boxes_preview:
+                for i, spin_box in enumerate(self.param_spin_boxes_preview):
+                    if i < len(self.param_defaults_preview):
                         try:
-                            spin_box.setValue(self.param_defaults[i][1])
+                            spin_box.setValue(self.param_defaults_preview[i][1])
                         except RuntimeError:
-                            print("警告: 无法设置参数值，控件可能已被删除")
+                            print("警告: 无法设置预览参数值，控件可能已被删除")
+            # 点云投影页面
+            elif self.title == "点云投影" and hasattr(self, 'param_spin_boxes_projection') and self.param_spin_boxes_projection:
+                for i, spin_box in enumerate(self.param_spin_boxes_projection):
+                    if i < len(self.param_defaults_projection):
+                        try:
+                            spin_box.setValue(self.param_defaults_projection[i][1])
+                        except RuntimeError:
+                            print("警告: 无法设置投影参数值，控件可能已被删除")
+            # 直接检测页面
+            elif self.title == "直接检测" and hasattr(self, 'param_spin_boxes_detect') and self.param_spin_boxes_detect:
+                for i, spin_box in enumerate(self.param_spin_boxes_detect):
+                    if i < len(self.param_defaults_detect):
+                        try:
+                            spin_box.setValue(self.param_defaults_detect[i][1])
+                        except RuntimeError:
+                            print("警告: 无法设置检测参数值，控件可能已被删除")
             
             # 重置提示文本 - 安全检查
-            default_text = "请选择PCD文件并点击生成预览" if "预览" in self.title else "请选择PCD文件并点击生成投影"
+            if "预览" in self.title:
+                default_text = "请选择PCD文件并点击生成预览"
+            elif "投影" in self.title:
+                default_text = "请选择PCD文件并点击生成投影"
+            elif "直接检测" in self.title:
+                default_text = "请选择PCD文件并点击直接检测"
             
             # 检查hint_label是否存在且有效
             if hasattr(self, 'hint_label'):
