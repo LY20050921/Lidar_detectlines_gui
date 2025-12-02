@@ -9,7 +9,8 @@ import numpy as np
 import cv2
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QGridLayout, QDoubleSpinBox, QFileDialog, QFrame
+    QGroupBox, QGridLayout, QDoubleSpinBox, QFileDialog, QFrame,
+    QScrollArea
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QPainter, QColor
 from PyQt5.QtCore import Qt, QPoint, pyqtSignal
@@ -28,6 +29,91 @@ sys.path.append(root_path)
 # 导入项目模块
 from preprocess.geometry.lineseg import LineSegment, LineSegments
 import ezdxf
+
+
+class LineItemWidget(QWidget):
+    """线段列表项组件"""
+    
+    def __init__(self, line_id, line_length, parent=None):
+        super().__init__(parent)
+        self.line_id = line_id
+        self.line_length = line_length
+        self.is_selected = False
+        
+        # 设置布局
+        self.setLayout(QHBoxLayout())
+        self.layout().setContentsMargins(5, 5, 5, 5)
+        self.layout().setSpacing(10)
+        
+        # 设置样式
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #333333;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';
+                font-size:14px;
+            }
+            QWidget:hover {
+                background-color: #404040;
+                border: 1px solid #666666;
+            }
+        """)
+        
+        # 添加ID标签
+        self.id_label = QLabel(f"线段 ID: {line_id}")
+        self.id_label.setStyleSheet("color: #ffffff; font-weight: bold;font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';")
+        self.id_label.setMinimumWidth(80)
+        self.id_label.setMaximumWidth(120)
+        self.layout().addWidget(self.id_label)
+        
+        # 添加弹性空间 - 左侧
+        self.layout().addStretch()
+        
+        # 添加长度标签
+        self.length_label = QLabel(f"长度: {line_length:.4f}")
+        self.length_label.setStyleSheet("color: #ffffff;font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';")
+        self.layout().addWidget(self.length_label)
+        
+        # 添加弹性空间 - 右侧
+        self.layout().addStretch()
+        
+        # 设置大小策略，使其能够水平扩展
+        self.setSizePolicy(self.sizePolicy().Expanding, self.sizePolicy().Fixed)
+    
+    def set_selected(self, selected):
+        """设置选中状态"""
+        self.is_selected = selected
+        if selected:
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #556b2f;
+                    border: 2px solid #9acd32;
+                    border-radius: 3px;
+                    font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';
+                    font-size:14px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #333333;
+                    border: 1px solid #555555;
+                    border-radius: 3px;
+                    font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';
+                    font-size:14px;
+                }
+                QWidget:hover {
+                    background-color: #404040;
+                    border: 1px solid #666666;
+                }
+            """)
+    
+    def mousePressEvent(self, event):
+        """鼠标点击事件，发出选中信号"""
+        if hasattr(self.parent(), 'parent_widget'):
+            self.parent().parent_widget.on_line_item_clicked(self.line_id)
+        super().mousePressEvent(event)
 
 
 class LineEditorComponent(QWidget):
@@ -56,18 +142,92 @@ class LineEditorComponent(QWidget):
         # 初始化数据
         self.img = None
         self.linesegs = None
+        self.line_items = []  # 存储线段列表项组件
+        self.selected_line_id = -1  # 当前选中的线段ID
         
         # 初始化UI
         self.init_ui()
+        
+        # 设置线段列表内容窗口的父组件引用
+        self.line_list_widget.parent_widget = self
+    
+    def update_line_list(self):
+        """更新线段列表"""
+        # 清空现有线段项
+        for item in self.line_items:
+            self.line_list_layout.removeWidget(item)
+            item.deleteLater()
+        self.line_items = []
+        
+        # 如果没有线段数据，直接返回
+        if self.linesegs is None:
+            return
+        
+        # 创建新的线段项
+        for i, line in enumerate(self.linesegs.linesegments):
+            # 使用线段对象的length属性
+            length = line.length
+            
+            # 创建线段项组件
+            line_item = LineItemWidget(i, length)
+            
+            # 如果是当前选中的线段，设置为选中状态
+            if i == self.selected_line_id:
+                line_item.set_selected(True)
+            
+            # 添加到布局和列表
+            self.line_list_layout.addWidget(line_item)
+            self.line_items.append(line_item)
+    
+    def on_line_item_clicked(self, line_id):
+        """处理线段项点击事件"""
+        # 更新选中状态
+        for item in self.line_items:
+            item.set_selected(item.line_id == line_id)
+        
+        # 更新当前选中的线段ID
+        self.selected_line_id = line_id
+        
+        # 更新画布上的选中状态
+        if self.canvas and 0 <= line_id < len(self.linesegs.linesegments):
+            self.canvas.selected_line_idx = line_id
+            self.canvas.selected_point_idx = -1
+            self.canvas.update()
+            
+            # 更新属性面板
+            if hasattr(self, 'update_selected_line_info'):
+                self.update_selected_line_info()
     
     def init_ui(self):
         """初始化UI组件"""
-        # 主布局
+        # 主布局 - 恢复为水平布局
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # 左侧属性面板
+        # 左侧画布容器
+        canvas_container = QWidget()
+        canvas_container.setStyleSheet("background-color: #1a1a1a;")
+        
+        # 初始化属性面板组件在for循环中完成，这里不再设置为None
+        canvas_layout = QVBoxLayout(canvas_container)
+        canvas_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # 画布标题
+        canvas_title = QLabel("线段编辑")
+        canvas_title.setStyleSheet("color: #ffffff; background-color: #1a1a1a; padding: 5px; font-weight: bold;")
+        canvas_title.setAlignment(Qt.AlignCenter)
+        
+        # 创建画布
+        self.canvas = LineEditorCanvas(self)
+        self.canvas.pointMoved.connect(self.on_point_moved)
+        self.canvas.dragFinished.connect(self.on_drag_finished)
+        
+        # 将标题和画布添加到容器布局
+        canvas_layout.addWidget(canvas_title)
+        canvas_layout.addWidget(self.canvas)
+        
+        # 右侧属性面板
         self.prop_group = QGroupBox("线段属性")
         self.prop_group.setStyleSheet("""
             QGroupBox {
@@ -83,11 +243,45 @@ class LineEditorComponent(QWidget):
                 color: #ffffff;
             }
         """)
-        prop_layout = QGridLayout()
-        prop_layout.setContentsMargins(10, 10, 10, 10)  # 添加内边距
+        prop_layout = QVBoxLayout(self.prop_group)
+        #prop_layout.setContentsMargins(10, 10, 10, 10)  # 添加内边距
+        
+        prop_layout.addSpacing(20)
+        # 线段列表滑动框
+        self.line_list_scroll_area = QScrollArea()
+        self.line_list_scroll_area.setWidgetResizable(True)
+        self.line_list_scroll_area.setStyleSheet("background-color: #1a1a1a; border: 1px solid #333;")
+        
+        # 滑动框内容窗口
+        self.line_list_widget = QWidget()
+        self.line_list_widget.setStyleSheet("background-color: #1a1a1a;")
+        self.line_list_layout = QVBoxLayout(self.line_list_widget)
+        self.line_list_layout.setAlignment(Qt.AlignTop)
+        self.line_list_layout.setContentsMargins(5, 5, 5, 5)
+        self.line_list_layout.setSpacing(5)
+        
+        # 设置滑动框的内容窗口
+        self.line_list_scroll_area.setWidget(self.line_list_widget)
+        # 设置滑动框可调整内容窗口大小
+        self.line_list_scroll_area.setWidgetResizable(True)
+        
+        # 设置滑动框固定高度为450像素
+        self.line_list_scroll_area.setFixedHeight(450)
+        
+        # 将滑动框添加到属性面板布局
+        prop_layout.addWidget(self.line_list_scroll_area)
+        
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("color: #555;")
+        prop_layout.addWidget(separator)
+
+        prop_layout.addSpacing(10)
         
         # 创建统一的标签样式
-        label_style = "color: #ffffff; font-size: 12px;"
+        label_style = "font-size: 14px; font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif'; color: #FFFFFF;"
         
         # 创建统一的输入框样式
         spinbox_style = """
@@ -97,6 +291,7 @@ class LineEditorComponent(QWidget):
                 color: #ffffff;
                 padding: 4px;
                 font-size: 12px;
+                width: 150px;
             }
             QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
                 background-color: #555;
@@ -105,58 +300,65 @@ class LineEditorComponent(QWidget):
             }
         """
         
-        # 端点A坐标
-        prop_layout.addWidget(QLabel("端点A x:"), 0, 0)
-        prop_layout.itemAtPosition(0, 0).widget().setStyleSheet(label_style)
-        self.point_a_x = QDoubleSpinBox()
-        self.point_a_x.setDecimals(4)
-        self.point_a_x.setMinimum(-10000.0)
-        self.point_a_x.setMaximum(10000.0)
-        self.point_a_x.setStyleSheet(spinbox_style)
-        self.point_a_x.valueChanged.connect(self.on_point_a_x_changed)
-        prop_layout.addWidget(self.point_a_x, 0, 1)
+        # 使用for循环创建端点坐标输入框，参考lidar_gui.py的实现方式
+        coord_params = [
+            ("端点A x:", "point_a_x", self.on_point_a_x_changed),
+            ("端点A y:", "point_a_y", self.on_point_a_y_changed),
+            ("端点B x:", "point_b_x", self.on_point_b_x_changed),
+            ("端点B y:", "point_b_y", self.on_point_b_y_changed)
+        ]
         
-        prop_layout.addWidget(QLabel("端点A y:"), 1, 0)
-        prop_layout.itemAtPosition(1, 0).widget().setStyleSheet(label_style)
-        self.point_a_y = QDoubleSpinBox()
-        self.point_a_y.setDecimals(4)
-        self.point_a_y.setMinimum(-10000.0)
-        self.point_a_y.setMaximum(10000.0)
-        self.point_a_y.setStyleSheet(spinbox_style)
-        self.point_a_y.valueChanged.connect(self.on_point_a_y_changed)
-        prop_layout.addWidget(self.point_a_y, 1, 1)
+        for label_text, attr_name, callback in coord_params:
+            # 创建水平布局来放置标签和输入框
+            h_layout = QHBoxLayout()
+            
+            # 创建标签
+            label = QLabel(label_text)
+            label.setStyleSheet(label_style)
+            label.setMinimumWidth(120)  # 增加标签宽度，确保文字完全显示
+            label.setMaximumWidth(120)
+            #label.setFixedWidth(80)
+            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)  # 左对齐
+            label.setStyleSheet("font-size: 14px; font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif'; color: #FFFFFF;")
+            h_layout.addWidget(label)
+            
+            # 创建输入框
+            spin_box = QDoubleSpinBox()
+            spin_box.setDecimals(4)
+            spin_box.setMinimum(-10000.0)
+            spin_box.setMaximum(100000.0)
+            spin_box.setSingleStep(1.0)
+            spin_box.setStyleSheet(spinbox_style)
+            spin_box.valueChanged.connect(callback)
+            h_layout.addWidget(spin_box)
+            
+            # 将输入框保存为实例属性
+            setattr(self, attr_name, spin_box)
+            
+            # 添加水平布局到垂直布局
+            prop_layout.addLayout(h_layout)
+            prop_layout.addSpacing(8)  #垂直组件之间的间距
         
-        # 端点B坐标
-        prop_layout.addWidget(QLabel("端点B x:"), 2, 0)
-        prop_layout.itemAtPosition(2, 0).widget().setStyleSheet(label_style)
-        self.point_b_x = QDoubleSpinBox()
-        self.point_b_x.setDecimals(4)
-        self.point_b_x.setMinimum(-10000.0)
-        self.point_b_x.setMaximum(10000.0)
-        self.point_b_x.setStyleSheet(spinbox_style)
-        self.point_b_x.valueChanged.connect(self.on_point_b_x_changed)
-        prop_layout.addWidget(self.point_b_x, 2, 1)
+        # 线段长度 - 使用水平布局
+        length_layout = QHBoxLayout()
+        length_label = QLabel("线段长度:")
+        length_label.setStyleSheet(label_style)
+        length_label.setMinimumWidth(120)  # 增加标签宽度，确保文字完全显示
+        length_label.setMaximumWidth(120)
+        #length_label.setFixedWidth(80)
+        length_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)  # 左对齐
+        length_layout.addWidget(length_label)
         
-        prop_layout.addWidget(QLabel("端点B y:"), 3, 0)
-        prop_layout.itemAtPosition(3, 0).widget().setStyleSheet(label_style)
-        self.point_b_y = QDoubleSpinBox()
-        self.point_b_y.setDecimals(4)
-        self.point_b_y.setMinimum(-10000.0)
-        self.point_b_y.setMaximum(10000.0)
-        self.point_b_y.setStyleSheet(spinbox_style)
-        self.point_b_y.valueChanged.connect(self.on_point_b_y_changed)
-        prop_layout.addWidget(self.point_b_y, 3, 1)
-        
-        # 线段长度
-        prop_layout.addWidget(QLabel("线段长度:"), 4, 0)
-        prop_layout.itemAtPosition(4, 0).widget().setStyleSheet(label_style)
         self.line_length = QLabel("0.0000")
         self.line_length.setStyleSheet("color: #ffffff; background-color: #404040; border: 1px solid #666; padding: 4px; font-size: 12px;")
         self.line_length.setFixedHeight(24)
-        prop_layout.addWidget(self.line_length, 4, 1)
+        self.line_length.setFixedWidth(180)
+        length_layout.addWidget(self.line_length)
+        
+        prop_layout.addLayout(length_layout)
         
         # 添加间距
-        prop_layout.setRowMinimumHeight(5, 20)
+        prop_layout.addSpacing(10)
         
         # 删除按钮
         self.delete_btn = QPushButton("删除线段")
@@ -168,7 +370,9 @@ class LineEditorComponent(QWidget):
                 padding: 8px 16px;
                 text-align: center;
                 font-size: 14px;
+                font-family: 'SimHei', 'Microsoft YaHei', 'sans-serif';
                 margin: 4px 2px;
+                width: 100%;
             }
             QPushButton:hover {
                 background-color: #c82333;
@@ -178,7 +382,7 @@ class LineEditorComponent(QWidget):
             }
         """)
         self.delete_btn.clicked.connect(self.delete_line)
-        prop_layout.addWidget(self.delete_btn, 6, 0, 1, 2)
+        prop_layout.addWidget(self.delete_btn)
         
         # 添加分隔线
         separator = QFrame()
@@ -186,6 +390,8 @@ class LineEditorComponent(QWidget):
         separator.setFrameShadow(QFrame.Sunken)
         separator.setStyleSheet("color: #555;")
         prop_layout.addWidget(separator)
+
+        prop_layout.addSpacing(10)
         
         # 创建水平布局来放置保存按钮
         save_buttons_layout = QHBoxLayout()
@@ -204,34 +410,14 @@ class LineEditorComponent(QWidget):
         save_buttons_layout.addWidget(self.save_dxf_button)
         
         # 将水平布局添加到属性布局中
-        prop_layout.addLayout(save_buttons_layout, prop_layout.rowCount(), 0, 1, 2)
+        prop_layout.addLayout(save_buttons_layout)
         
         # 添加拉伸因子
-        prop_layout.setRowStretch(6, 1)
+        prop_layout.addStretch(1)
         
         self.prop_group.setLayout(prop_layout)
         
-        # 右侧画布容器
-        canvas_container = QWidget()
-        canvas_container.setStyleSheet("background-color: #1a1a1a;")
-        canvas_layout = QVBoxLayout(canvas_container)
-        canvas_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 画布标题
-        canvas_title = QLabel("线段编辑")
-        canvas_title.setStyleSheet("color: #ffffff; background-color: #1a1a1a; padding: 5px; font-weight: bold;")
-        canvas_title.setAlignment(Qt.AlignCenter)
-        
-        # 创建画布
-        self.canvas = LineEditorCanvas(self)
-        self.canvas.pointMoved.connect(self.on_point_moved)
-        self.canvas.dragFinished.connect(self.on_drag_finished)
-        
-        # 将标题和画布添加到容器布局
-        canvas_layout.addWidget(canvas_title)
-        canvas_layout.addWidget(self.canvas)
-        
-        # 将组件添加到主布局 - 调整为左侧画布，右侧属性面板
+        # 将组件添加到主布局 - 左侧画布，右侧属性面板
         main_layout.addWidget(canvas_container, 3)
         main_layout.addWidget(self.prop_group, 1)
         
@@ -274,6 +460,9 @@ class LineEditorComponent(QWidget):
         self.clear_selected_line_info()
         
         # 直接使用内部存储的线段集，不再依赖LineEditModel
+        
+        # 更新线段列表
+        self.update_line_list()
     
     def save_image(self, file_path):
         """保存画布内容为图片
@@ -383,24 +572,29 @@ class LineEditorComponent(QWidget):
             line: LineSegment对象
         """
         if line:
-            self.point_a_x.blockSignals(True)
-            self.point_a_y.blockSignals(True)
-            self.point_b_x.blockSignals(True)
-            self.point_b_y.blockSignals(True)
-            
-            self.point_a_x.setValue(line.point_a[0])
-            self.point_a_y.setValue(line.point_a[1])
-            self.point_b_x.setValue(line.point_b[0])
-            self.point_b_y.setValue(line.point_b[1])
-            
-            # 计算线段长度
-            length = np.sqrt((line.point_b[0] - line.point_a[0])**2 + (line.point_b[1] - line.point_a[1])** 2)
-            self.line_length.setText(f"{length:.4f}")
-            
-            self.point_a_x.blockSignals(False)
-            self.point_a_y.blockSignals(False)
-            self.point_b_x.blockSignals(False)
-            self.point_b_y.blockSignals(False)
+            # 检查属性面板组件是否已初始化
+            if hasattr(self, 'point_a_x') and self.point_a_x is not None:
+                self.point_a_x.blockSignals(True)
+                self.point_a_y.blockSignals(True)
+                self.point_b_x.blockSignals(True)
+                self.point_b_y.blockSignals(True)
+                
+                self.point_a_x.setValue(line.point_a[0])
+                self.point_a_y.setValue(line.point_a[1])
+                self.point_b_x.setValue(line.point_b[0])
+                self.point_b_y.setValue(line.point_b[1])
+                
+                # 计算线段长度
+                length = np.sqrt((line.point_b[0] - line.point_a[0])**2 + (line.point_b[1] - line.point_a[1])** 2)
+                if hasattr(self, 'line_length') and self.line_length is not None:
+                    self.line_length.setText(f"{length:.4f}")
+                # 更新线段对象的length属性
+                line.length = length
+                
+                self.point_a_x.blockSignals(False)
+                self.point_a_y.blockSignals(False)
+                self.point_b_x.blockSignals(False)
+                self.point_b_y.blockSignals(False)
     
     def update_selected_line_info(self):
         """更新选中线段的信息"""
@@ -408,24 +602,38 @@ class LineEditorComponent(QWidget):
             line = self.linesegs.linesegments[self.canvas.selected_line_idx]
             self.update_line_properties(line)
             self.lineSelected.emit(line)
+            
+            # 更新线段列表中的选中状态
+            self.selected_line_id = self.canvas.selected_line_idx
+            for item in self.line_items:
+                item.set_selected(item.line_id == self.selected_line_id)
     
     def clear_selected_line_info(self):
         """清除选中线段的信息"""
-        self.point_a_x.blockSignals(True)
-        self.point_a_y.blockSignals(True)
-        self.point_b_x.blockSignals(True)
-        self.point_b_y.blockSignals(True)
+        # 检查属性面板组件是否已初始化
+        if hasattr(self, 'point_a_x') and self.point_a_x is not None:
+            self.point_a_x.blockSignals(True)
+            self.point_a_y.blockSignals(True)
+            self.point_b_x.blockSignals(True)
+            self.point_b_y.blockSignals(True)
+            
+            self.point_a_x.setValue(0.0)
+            self.point_a_y.setValue(0.0)
+            self.point_b_x.setValue(0.0)
+            self.point_b_y.setValue(0.0)
+            
+            if hasattr(self, 'line_length') and self.line_length is not None:
+                self.line_length.setText("0.0000")
+            
+            self.point_a_x.blockSignals(False)
+            self.point_a_y.blockSignals(False)
+            self.point_b_x.blockSignals(False)
+            self.point_b_y.blockSignals(False)
         
-        self.point_a_x.setValue(0.0)
-        self.point_a_y.setValue(0.0)
-        self.point_b_x.setValue(0.0)
-        self.point_b_y.setValue(0.0)
-        self.line_length.setText("0.0000")
-        
-        self.point_a_x.blockSignals(False)
-        self.point_a_y.blockSignals(False)
-        self.point_b_x.blockSignals(False)
-        self.point_b_y.blockSignals(False)
+        # 清除线段列表中的选中状态
+        self.selected_line_id = -1
+        for item in self.line_items:
+            item.set_selected(False)
     
     def on_point_moved(self, line_idx, point_idx, new_pos):
         """处理端点移动事件
@@ -438,9 +646,28 @@ class LineEditorComponent(QWidget):
         if not self.linesegs or line_idx >= len(self.linesegs.linesegments):
             return
         
+        line = self.linesegs.linesegments[line_idx]
+        # 更新线段端点位置
+        if point_idx == 0:
+            line.point_a = np.array(new_pos)
+        else:
+            line.point_b = np.array(new_pos)
+        
+        # 重新计算线段长度和方向
+        line.direction = line.point_b - line.point_a
+        line.direction = line.direction.astype(float)
+        line.direction /= np.linalg.norm(line.direction)
+        line.length = np.linalg.norm(line.point_b - line.point_a)
+        
         # 发出修改信号
-        self.lineModified.emit(self.linesegs.linesegments[line_idx])
-        # 注意：不再实时更新属性面板，以提高拖拽性能
+        self.lineModified.emit(line)
+        
+        # 更新线段列表，确保上方显示的长度也同步更新
+        self.update_line_list()
+        
+        # 如果当前移动的线段是选中的，更新属性面板
+        if self.canvas.selected_line_idx == line_idx:
+            self.update_selected_line_info()
     
     def on_drag_finished(self, line_idx):
         """处理拖拽结束事件
@@ -458,9 +685,17 @@ class LineEditorComponent(QWidget):
         if self.canvas.selected_line_idx >= 0 and self.linesegs and self.canvas.selected_line_idx < len(self.linesegs.linesegments):
             line = self.linesegs.linesegments[self.canvas.selected_line_idx]
             line.point_a = (value, line.point_a[1])
+            # 更新线段对象的长度属性
+            line.length = line.get_length()
+            # 更新方向向量
+            line.direction = np.array(line.point_b) - np.array(line.point_a)
+            if np.linalg.norm(line.direction) > 0:
+                line.direction /= np.linalg.norm(line.direction)
             self.canvas.update()
             # 更新属性面板
             self.update_line_properties(line)
+            # 更新线段列表（包括长度信息）
+            self.update_line_list()
             # 发送修改信号
             self.lineModified.emit(line)
     
@@ -469,9 +704,17 @@ class LineEditorComponent(QWidget):
         if self.canvas.selected_line_idx >= 0 and self.linesegs and self.canvas.selected_line_idx < len(self.linesegs.linesegments):
             line = self.linesegs.linesegments[self.canvas.selected_line_idx]
             line.point_a = (line.point_a[0], value)
+            # 更新线段对象的长度属性
+            line.length = line.get_length()
+            # 更新方向向量
+            line.direction = np.array(line.point_b) - np.array(line.point_a)
+            if np.linalg.norm(line.direction) > 0:
+                line.direction /= np.linalg.norm(line.direction)
             self.canvas.update()
             # 更新属性面板
             self.update_line_properties(line)
+            # 更新线段列表（包括长度信息）
+            self.update_line_list()
             # 发送修改信号
             self.lineModified.emit(line)
     
@@ -480,9 +723,17 @@ class LineEditorComponent(QWidget):
         if self.canvas.selected_line_idx >= 0 and self.linesegs and self.canvas.selected_line_idx < len(self.linesegs.linesegments):
             line = self.linesegs.linesegments[self.canvas.selected_line_idx]
             line.point_b = (value, line.point_b[1])
+            # 更新线段对象的长度属性
+            line.length = line.get_length()
+            # 更新方向向量
+            line.direction = np.array(line.point_b) - np.array(line.point_a)
+            if np.linalg.norm(line.direction) > 0:
+                line.direction /= np.linalg.norm(line.direction)
             self.canvas.update()
             # 更新属性面板
             self.update_line_properties(line)
+            # 更新线段列表（包括长度信息）
+            self.update_line_list()
             # 发送修改信号
             self.lineModified.emit(line)
     
@@ -491,9 +742,17 @@ class LineEditorComponent(QWidget):
         if self.canvas.selected_line_idx >= 0 and self.linesegs and self.canvas.selected_line_idx < len(self.linesegs.linesegments):
             line = self.linesegs.linesegments[self.canvas.selected_line_idx]
             line.point_b = (line.point_b[0], value)
+            # 更新线段对象的长度属性
+            line.length = line.get_length()
+            # 更新方向向量
+            line.direction = np.array(line.point_b) - np.array(line.point_a)
+            if np.linalg.norm(line.direction) > 0:
+                line.direction /= np.linalg.norm(line.direction)
             self.canvas.update()
             # 更新属性面板
             self.update_line_properties(line)
+            # 更新线段列表（包括长度信息）
+            self.update_line_list()
             # 发送修改信号
             self.lineModified.emit(line)
     
@@ -512,6 +771,9 @@ class LineEditorComponent(QWidget):
             self.clear_selected_line_info()
             # 发出删除信号
             self.lineDeleted.emit(deleted_idx)
+            
+            # 更新线段列表
+            self.update_line_list()
     
     def from_data_source(self, img=None, linesegs=None):
         """从数据源加载数据
@@ -809,6 +1071,7 @@ class LineEditorCanvas(QWidget):
             
             # 处理点击事件
             if clicked:
+                # 更新选中状态
                 self.selected_line_idx = closest_line_idx
                 self.selected_point_idx = closest_point_idx
                 self.is_dragging = (closest_point_idx != -1)
@@ -825,14 +1088,19 @@ class LineEditorCanvas(QWidget):
                         point_y = line.point_b[1] * scale_y + offset_y
                     self.click_offset = (mouse_x - point_x, mouse_y - point_y)
                 
-                # 更新属性面板
-                if self.parent_widget:
+                # 确保调用父组件的更新方法来刷新属性面板
+                if hasattr(self.parent_widget, 'update_selected_line_info'):
                     self.parent_widget.update_selected_line_info()
+                    
+                # 发送线段选中信号
+                if hasattr(self.parent_widget, 'lineSelected'):
+                    line = self.linesegs.linesegments[closest_line_idx]
+                    self.parent_widget.lineSelected.emit(line)
             else:
                 # 没有点击任何线段，清除选中状态
                 self.selected_line_idx = -1
                 self.selected_point_idx = -1
-                if self.parent_widget:
+                if hasattr(self.parent_widget, 'clear_selected_line_info'):
                     self.parent_widget.clear_selected_line_info()
             
             # 更新画布
