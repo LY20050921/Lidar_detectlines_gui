@@ -1480,6 +1480,15 @@ class GUIApiAdapter:
         print(f"PCD文件路径：{pcd_path}")
         print(f"配置文件路径：{cfg_path}")
         
+        # 获取投影比例参数
+        projection_scale = 30.0
+        if hasattr(page, 'param_spin_boxes_projection'):
+            spin_boxes = page.param_spin_boxes_projection
+            if len(spin_boxes) > 0:
+                projection_scale = spin_boxes[0].value()
+        
+        print(f"投影比例参数：{projection_scale}")
+        
         # 启动工作线程
         print("启动工作线程处理投影请求")
         self._start_worker(
@@ -1487,6 +1496,7 @@ class GUIApiAdapter:
             pcd_path,
             cfg_path,
             save_png=True,
+            projection_scale=projection_scale,
             page=page
         )
         print("投影请求已提交到工作线程")

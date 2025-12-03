@@ -70,7 +70,7 @@ class ApiClient:
             except requests.exceptions.RequestException as e:
                 raise Exception(f"点云预览API调用失败: {str(e)}")
     
-    def project_pcd(self, pcd_path: str, cfg_path: str, save_png: bool = True) -> Dict[str, Any]:
+    def project_pcd(self, pcd_path: str, cfg_path: str, save_png: bool = True, projection_scale: float = 30.0) -> Dict[str, Any]:
         """调用点云投影接口
         
         Args:
@@ -95,7 +95,8 @@ class ApiClient:
         # 准备表单数据
         data = {
             "cfg": cfg_path,
-            "save_png": str(save_png).lower()
+            "save_png": str(save_png).lower(),
+            "projection_scale": str(projection_scale)
         }
         
         # 准备文件数据

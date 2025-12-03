@@ -199,6 +199,7 @@ async def projection_endpoint(
     file: UploadFile = File(...),
     cfg: str = Form(...),  # 移除默认值，设为必需参数
     save_png: bool = Form(True),
+    projection_scale: float = Form(...),
 ):
     pcd_path = _save_upload(file)
     # 3D点云转2D投影
@@ -208,7 +209,8 @@ async def projection_endpoint(
         pcd_path=pcd_path,
         cfg_path=cfg,
         save_dir=out_dir,
-        save_png=save_png
+        save_png=save_png,
+        projection_scale=projection_scale,
     )
     return DetectResult(
         message="ok",

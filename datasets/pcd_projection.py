@@ -31,6 +31,7 @@ def run_pcd_projection(
     ransac_n: int = 3,
     num_iterations: int = 1000,
     save_png: bool = True,
+    projection_scale: float | None = None,
 ):
     """
     将 3D 点云投影到 2D 平面，并保存 2D 点云与可视化图像。
@@ -59,6 +60,12 @@ def run_pcd_projection(
 
     # 2. 读取 cfg（这个 cfg 之后给 PCD2d / PointCloudManager 用）
     cfg = load_cfg(cfg_path)
+    # ⭐ 如果传入新的 scale，则覆盖 YAML 的 pcd2d.scale
+    if projection_scale is not None:
+        if hasattr(cfg, "pcd2d"):
+            cfg.pcd2d.scale = int(projection_scale)
+            print(f"[projection] 使用用户自定义投影分辨率 scale = {projection_scale}")
+    
 
     # 3. RANSAC 去地面（参数与 pcd2line_test.py 保持一致）
     plane_model, inliers = pcd.segment_plane(
@@ -125,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument("--cfg", required=True, help="配置文件路径 (.yaml)")
     parser.add_argument("--out", default="./output/projection", help="输出目录")
     parser.add_argument("--no_png", action="store_true", help="不保存 PNG 图像")
+    parser.add_argument("--scale", type=float, help="投影分辨率（覆盖 YAML 中的 pcd2d.scale）")
     args = parser.parse_args()
 
     result = run_pcd_projection(
@@ -132,6 +140,7 @@ if __name__ == "__main__":
         cfg_path=args.cfg,
         save_dir=args.out,
         save_png=not args.no_png,
+        projection_scale=args.scale,
     )
 
     print("\n===== 投影完成 =====")

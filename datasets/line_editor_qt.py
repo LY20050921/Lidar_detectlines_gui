@@ -246,7 +246,7 @@ class LineEditorComponent(QWidget):
         prop_layout = QVBoxLayout(self.prop_group)
         #prop_layout.setContentsMargins(10, 10, 10, 10)  # 添加内边距
         
-        prop_layout.addSpacing(20)
+        prop_layout.addSpacing(30)
         # 线段列表滑动框
         self.line_list_scroll_area = QScrollArea()
         self.line_list_scroll_area.setWidgetResizable(True)
@@ -266,7 +266,7 @@ class LineEditorComponent(QWidget):
         self.line_list_scroll_area.setWidgetResizable(True)
         
         # 设置滑动框固定高度为450像素
-        self.line_list_scroll_area.setFixedHeight(450)
+        self.line_list_scroll_area.setFixedHeight(420)
         
         # 将滑动框添加到属性面板布局
         prop_layout.addWidget(self.line_list_scroll_area)
@@ -1334,14 +1334,14 @@ class TestWindow(QMainWindow):
             for i in range(150, 350, 50):
                 cv2.line(img1, (i, 100), (i, 400), 128, 1)
             # 创建线段（模拟检测到的线段）- 使用numpy数组
-                line1 = LineSegment(np.array([100, 100]), np.array([400, 100]))  # 屋顶线
-                line2 = LineSegment(np.array([100, 100]), np.array([100, 400]))  # 左边线
-                line3 = LineSegment(np.array([400, 100]), np.array([400, 400]))  # 右边线
-                line4 = LineSegment(np.array([100, 400]), np.array([400, 400]))  # 底线
-                line5 = LineSegment(np.array([450, 150]), np.array([600, 150]))  # 小屋顶线
-                line6 = LineSegment(np.array([450, 150]), np.array([450, 350]))  # 小左边线
-                line7 = LineSegment(np.array([600, 150]), np.array([600, 350]))  # 小右边线
-                line8 = LineSegment(np.array([450, 350]), np.array([600, 350]))  # 小底线
+            line1 = LineSegment(np.array([100, 100]), np.array([400, 100]))  # 屋顶线
+            line2 = LineSegment(np.array([100, 100]), np.array([100, 400]))  # 左边线
+            line3 = LineSegment(np.array([400, 100]), np.array([400, 400]))  # 右边线
+            line4 = LineSegment(np.array([100, 400]), np.array([400, 400]))  # 底线
+            line5 = LineSegment(np.array([450, 150]), np.array([600, 150]))  # 小屋顶线
+            line6 = LineSegment(np.array([450, 150]), np.array([450, 350]))  # 小左边线
+            line7 = LineSegment(np.array([600, 150]), np.array([600, 350]))  # 小右边线
+            line8 = LineSegment(np.array([450, 350]), np.array([600, 350]))  # 小底线
             
             # 创建线段集 - 直接传入线段列表
             linesegs1 = LineSegments([line1, line2, line3, line4, line5, line6, line7, line8])

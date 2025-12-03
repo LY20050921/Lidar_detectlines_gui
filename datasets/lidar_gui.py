@@ -170,7 +170,7 @@ class MainPage(QWidget):
             
             # 视角参数
             angle_params = [
-                ("线条粗细(Scale):", 10.0, 1.0, 100.0, 1.0)
+                ("线条粗细(Scale):", 10.0, 1.0, 300.0, 1.0)
             ]
             
             for label_text, default_value, min_val, max_val, step in angle_params:

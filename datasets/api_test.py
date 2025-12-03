@@ -48,7 +48,7 @@ except requests.exceptions.JSONDecodeError:
 for i in range(len(url)):
     print(f"{i+3}.{url[i]}")
     files = {"file": open(pcd_path, "rb")}
-    data = {"cfg": cfg_path, "save_png": "true"}
+    data = {"cfg": cfg_path, "save_png": "true", "projection_scale": 200.0}
     res = requests.post(url[i], files=files,data=data)
     files["file"].close()
     print("接口原始返回：", res.text)
