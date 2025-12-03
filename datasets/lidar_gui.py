@@ -25,7 +25,7 @@ class MainPage(QWidget):
 
         # 点云投影页面参数默认值
         self.param_defaults_projection = [
-            ("线条粗细:", 10.0)
+            ("线条粗细:", 30.0)
         ]
         # 直接检测默认参数值
         self.param_defaults_detect = [

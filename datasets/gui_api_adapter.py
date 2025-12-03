@@ -1546,13 +1546,23 @@ class GUIApiAdapter:
         print(f"PCD文件路径：{pcd_path}")
         print(f"配置文件路径：{cfg_path}")
         
+        # 获取最小线段长度参数
+        min_line_length = 30
+        if hasattr(page, 'param_spin_boxes_detect'):
+            spin_boxes = page.param_spin_boxes_detect
+            if len(spin_boxes) > 0:
+                min_line_length = spin_boxes[0].value()
+        
+        print(f"最小线段长度参数：{min_line_length}")
+        
         # 启动工作线程
         print("启动工作线程处理线段检测请求")
         self._start_worker(
             api_client.detect_lines,
             pcd_path,
             cfg_path,
-            page=page
+            min_line_length=min_line_length,
+            page=page,
         )
         print("线段检测请求已提交到工作线程")
         

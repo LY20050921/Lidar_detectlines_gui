@@ -110,12 +110,13 @@ class ApiClient:
             except requests.exceptions.RequestException as e:
                 raise Exception(f"点云投影API调用失败: {str(e)}")
     
-    def detect_lines(self, pcd_path: str, cfg_path: str) -> Dict[str, Any]:
+    def detect_lines(self, pcd_path: str, cfg_path: str, min_line_length: int = 30) -> Dict[str, Any]:
         """调用线段检测接口
         
         Args:
             pcd_path: 点云文件路径
             cfg_path: 配置文件路径
+            min_line_length: 最小线段长度参数
             
         Returns:
             包含检测结果的字典，格式如下：
@@ -135,7 +136,8 @@ class ApiClient:
         data = {
             "cfg": cfg_path,
             "return_numpy": "true",
-            "return_linesegs": "true"
+            "return_linesegs": "true",
+            "min_line_length": str(min_line_length)
         }
         
         # 准备文件数据

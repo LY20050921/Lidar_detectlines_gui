@@ -79,12 +79,13 @@ async def detect_once_endpoint(
     cfg: str = Form(...),  # 移除默认值，设为必需参数
     return_numpy: bool = Form(False),  # 添加参数控制是否返回numpy数组
     return_linesegs: bool = Form(False),  # 添加参数控制是否返回线段数据
+    min_line_length: int = Form(30),  # 添加参数控制最小线段长度
 ):
     pcd_path = _save_upload(file)
     # 一次检测
     out_dir = os.path.join(OUT_DIR, "once")
     os.makedirs(out_dir, exist_ok=True)
-    res = run_pcd2line_once(pcd_path, cfg_path=cfg, save_dir=out_dir, show=False)
+    res = run_pcd2line_once(pcd_path, cfg_path=cfg, save_dir=out_dir, show=False, min_line_length=min_line_length)
     once_png = os.path.join(out_dir, "once_detect.png")
     
     # 创建响应对象

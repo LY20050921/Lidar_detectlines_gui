@@ -44,6 +44,7 @@ def run_pcd2line_once(
     ransac_n: int = 3,
     num_iterations: int = 1000,
     show: bool = False,
+    min_line_length: int = 30, 
 ):
     """
     一次检测流程：PCD -> 去地面 -> 2D投影 -> 霍夫线段 -> 合并/筛选 -> 叠画并保存
@@ -82,7 +83,13 @@ def run_pcd2line_once(
     print(f"[pcd2line_test] img.shape={img.shape}, dtype={img.dtype}")
 
     # 4) 线段检测（一次）
-    linesegs = hough_line_detection(img, threshold=60, minLineLength=30, maxLineGap=30)
+    linesegs = hough_line_detection(
+        img,
+        threshold=60,
+        minLineLength=min_line_length,  # ⭐ 使用用户传入的长度
+        maxLineGap=30,
+    )
+
     linesegs.merge_uf(angle_thd=10, pt_thd=10)
     linesegs.cluster_angle(bandwidth=0.01)
     linesegs.remove_minor_angle(min_num=5, min_length=60)
@@ -136,6 +143,18 @@ if __name__ == "__main__":
     ap.add_argument("--cfg", required=True)
     ap.add_argument("--out", default="D:/work/l2bim/output")
     ap.add_argument("--show", action="store_true")
+    ap.add_argument(
+        "--min_len",
+        type=int,
+        default=30,
+        help="最小线段长度（像素，越大保留的线段越长）",
+    )
     args = ap.parse_args()
 
-    run_pcd2line_once(args.pcd, args.cfg, save_dir=args.out, show=args.show)
+    run_pcd2line_once(
+        args.pcd,
+        args.cfg,
+        save_dir=args.out,
+        show=args.show,
+        min_line_length=args.min_len,  # ⭐ 传给检测函数
+    )
