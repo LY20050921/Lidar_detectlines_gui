@@ -205,27 +205,45 @@ class LineEditorComponent(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # 左侧画布容器
-        canvas_container = QWidget()
-        canvas_container.setStyleSheet("background-color: #1a1a1a;")
+        # 左侧容器
+        left_container = QWidget()
+        left_container.setStyleSheet("background-color: #1a1a1a;")
+        left_layout = QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
         
-        # 初始化属性面板组件在for循环中完成，这里不再设置为None
-        canvas_layout = QVBoxLayout(canvas_container)
-        canvas_layout.setContentsMargins(0, 0, 0, 0)
+        # 左侧上部分（五分之二）
+        top_container = QWidget()
+        top_container.setStyleSheet("background-color: #1a1a1a;")
+        top_layout = QVBoxLayout(top_container)
+        top_layout.setContentsMargins(0, 0, 0, 0)
         
         # 画布标题
         canvas_title = QLabel("线段编辑")
         canvas_title.setStyleSheet("color: #ffffff; background-color: #1a1a1a; padding: 5px; font-weight: bold;")
         canvas_title.setAlignment(Qt.AlignCenter)
         
+        # 可以在这里添加其他控件，如工具栏等
+        
+        top_layout.addWidget(canvas_title)
+        top_layout.addStretch(1)
+        
+        # 左侧下部分（五分之三） - 线段编辑区域
+        bottom_container = QWidget()
+        bottom_container.setStyleSheet("background-color: #1a1a1a;")
+        bottom_layout = QVBoxLayout(bottom_container)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        
         # 创建画布
         self.canvas = LineEditorCanvas(self)
         self.canvas.pointMoved.connect(self.on_point_moved)
         self.canvas.dragFinished.connect(self.on_drag_finished)
         
-        # 将标题和画布添加到容器布局
-        canvas_layout.addWidget(canvas_title)
-        canvas_layout.addWidget(self.canvas)
+        bottom_layout.addWidget(self.canvas)
+        
+        # 将上下两部分添加到左侧布局，比例为1:8
+        left_layout.addWidget(top_container, 1)
+        left_layout.addWidget(bottom_container, 8)
         
         # 右侧属性面板
         self.prop_group = QGroupBox("线段属性")
@@ -418,7 +436,7 @@ class LineEditorComponent(QWidget):
         self.prop_group.setLayout(prop_layout)
         
         # 将组件添加到主布局 - 左侧画布，右侧属性面板
-        main_layout.addWidget(canvas_container, 3)
+        main_layout.addWidget(left_container, 3)
         main_layout.addWidget(self.prop_group, 1)
         
         # 设置布局
@@ -835,6 +853,14 @@ class LineEditorCanvas(QWidget):
         self.setMouseTracking(True)
         # 设置背景颜色
         self.setStyleSheet("background-color: #1e1e1e; border: none;")
+        
+        # 缩放和拖动相关属性
+        self.scale_factor = 1.0  # 初始缩放因子
+        self.offset_x = 0  # 水平偏移量
+        self.offset_y = 0  # 垂直偏移量
+        self.is_panning = False  # 是否正在拖动画布
+        self.pan_start_pos = QPoint()  # 拖动开始位置
+        self.pan_start_offset = (0, 0)  # 拖动开始时的偏移量
     
     def setParent(self, parent):
         """设置父对象"""
@@ -917,17 +943,30 @@ class LineEditorCanvas(QWidget):
         
         # 绘制背景图像
         if self.img_pixmap:
+            # 计算原始缩放和偏移
             scaled_pixmap = self.img_pixmap.scaled(
                 self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
-            x = (self.width() - scaled_pixmap.width()) // 2
-            y = (self.height() - scaled_pixmap.height()) // 2
-            painter.drawPixmap(x, y, scaled_pixmap)
+            base_x = (self.width() - scaled_pixmap.width()) // 2
+            base_y = (self.height() - scaled_pixmap.height()) // 2
             
-            # 保存偏移量，用于线段绘制
-            offset_x, offset_y = x, y
-            scale_x = scaled_pixmap.width() / self.img.shape[1]
-            scale_y = scaled_pixmap.height() / self.img.shape[0]
+            # 应用用户缩放和偏移
+            final_x = int(base_x + self.offset_x)
+            final_y = int(base_y + self.offset_y)
+            
+            # 计算最终的缩放比例
+            scale_x = scaled_pixmap.width() / self.img.shape[1] * self.scale_factor
+            scale_y = scaled_pixmap.height() / self.img.shape[0] * self.scale_factor
+            
+            # 计算最终的图像尺寸
+            final_width = int(self.img.shape[1] * scale_x)
+            final_height = int(self.img.shape[0] * scale_y)
+            
+            # 绘制缩放后的图像
+            final_pixmap = self.img_pixmap.scaled(
+                final_width, final_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            painter.drawPixmap(final_x, final_y, final_pixmap)
             
             # 绘制线段
             if self.linesegs:
@@ -939,10 +978,10 @@ class LineEditorCanvas(QWidget):
                         painter.setPen(pen)
                         
                         # 正确计算线段端点坐标
-                        x1 = int(line.point_a[0] * scale_x + offset_x)
-                        y1 = int(line.point_a[1] * scale_y + offset_y)
-                        x2 = int(line.point_b[0] * scale_x + offset_x)
-                        y2 = int(line.point_b[1] * scale_y + offset_y)
+                        x1 = int(line.point_a[0] * scale_x + final_x)
+                        y1 = int(line.point_a[1] * scale_y + final_y)
+                        x2 = int(line.point_b[0] * scale_x + final_x)
+                        y2 = int(line.point_b[1] * scale_y + final_y)
                         
                         painter.drawLine(x1, y1, x2, y2)
                         
@@ -958,10 +997,10 @@ class LineEditorCanvas(QWidget):
                     pen = QPen(QColor(255, 255, 0), 4)
                     painter.setPen(pen)
                     
-                    x1 = int(line.point_a[0] * scale_x + offset_x)
-                    y1 = int(line.point_a[1] * scale_y + offset_y)
-                    x2 = int(line.point_b[0] * scale_x + offset_x)
-                    y2 = int(line.point_b[1] * scale_y + offset_y)
+                    x1 = int(line.point_a[0] * scale_x + final_x)
+                    y1 = int(line.point_a[1] * scale_y + final_y)
+                    x2 = int(line.point_b[0] * scale_x + final_x)
+                    y2 = int(line.point_b[1] * scale_y + final_y)
                     
                     painter.drawLine(x1, y1, x2, y2)
                     
@@ -977,10 +1016,10 @@ class LineEditorCanvas(QWidget):
                     pen = QPen(QColor(0, 150, 255), 4)
                     painter.setPen(pen)
                     
-                    x1 = int(line.point_a[0] * scale_x + offset_x)
-                    y1 = int(line.point_a[1] * scale_y + offset_y)
-                    x2 = int(line.point_b[0] * scale_x + offset_x)
-                    y2 = int(line.point_b[1] * scale_y + offset_y)
+                    x1 = int(line.point_a[0] * scale_x + final_x)
+                    y1 = int(line.point_a[1] * scale_y + final_y)
+                    x2 = int(line.point_b[0] * scale_x + final_x)
+                    y2 = int(line.point_b[1] * scale_y + final_y)
                     
                     painter.drawLine(x1, y1, x2, y2)
                     
@@ -1005,21 +1044,64 @@ class LineEditorCanvas(QWidget):
             scaled_pixmap = self.img_pixmap.scaled(
                 self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
-            self.last_offset_x = (self.width() - scaled_pixmap.width()) // 2
-            self.last_offset_y = (self.height() - scaled_pixmap.height()) // 2
-            self.last_scale_x = scaled_pixmap.width() / self.img.shape[1]
-            self.last_scale_y = scaled_pixmap.height() / self.img.shape[0]
+            self.last_offset_x = (self.width() - scaled_pixmap.width()) // 2 + self.offset_x
+            self.last_offset_y = (self.height() - scaled_pixmap.height()) // 2 + self.offset_y
+            self.last_scale_x = scaled_pixmap.width() / self.img.shape[1] * self.scale_factor
+            self.last_scale_y = scaled_pixmap.height() / self.img.shape[0] * self.scale_factor
             return self.last_scale_x, self.last_scale_y, self.last_offset_x, self.last_offset_y
         return 1.0, 1.0, 0, 0
     
+    def wheelEvent(self, event):
+        """鼠标滚轮事件，实现缩放功能"""
+        if self.img is None:
+            return
+        
+        # 获取鼠标滚轮的增量
+        delta = event.angleDelta().y()
+        scale_factor = 1.05 if delta > 0 else 0.95
+        
+        # 获取鼠标在画布上的位置
+        mouse_pos = event.pos()
+        
+        # 计算缩放前后的鼠标位置对应的图像坐标
+        scale_x, scale_y, offset_x, offset_y = self._calculate_scale_and_offset()
+        img_x = (mouse_pos.x() - offset_x) / (scale_x * self.scale_factor)
+        img_y = (mouse_pos.y() - offset_y) / (scale_y * self.scale_factor)
+        
+        # 更新缩放因子
+        old_scale = self.scale_factor
+        self.scale_factor *= scale_factor
+        
+        # 限制缩放范围
+        self.scale_factor = max(0.1, min(self.scale_factor, 10.0))
+        
+        # 调整偏移量，使缩放中心点保持在鼠标位置
+        new_scale = self.scale_factor
+        self.offset_x = mouse_pos.x() - (img_x * scale_x * new_scale) - offset_x
+        self.offset_y = mouse_pos.y() - (img_y * scale_y * new_scale) - offset_y
+        
+        # 更新画布
+        self.update()
+    
     def mousePressEvent(self, event):
         """鼠标按下事件"""
-        if self.img is None or self.linesegs is None:
+        if self.img is None:
             return
         
         # 获取鼠标坐标
         mouse_x = event.x()
         mouse_y = event.y()
+        
+        # 检查是否是拖动操作（中键、Ctrl+左键，或左键未点击任何线段/端点）
+        if event.button() == Qt.MidButton or (event.button() == Qt.LeftButton and event.modifiers() & Qt.ControlModifier):
+            self.is_panning = True
+            self.pan_start_pos = QPoint(mouse_x, mouse_y)
+            self.pan_start_offset = (self.offset_x, self.offset_y)
+            return
+        
+        # 如果是编辑线段模式，需要self.linesegs不为空
+        if self.linesegs is None:
+            return
         
         # 计算缩放比例和偏移
         if self.img_pixmap:
@@ -1034,7 +1116,7 @@ class LineEditorCanvas(QWidget):
             
             # 首先检查是否点击了端点
             for i, line in enumerate(self.linesegs.linesegments):
-                # 端点A
+                # 端点A - 应用当前的偏移量
                 x1 = int(line.point_a[0] * scale_x + offset_x)
                 y1 = int(line.point_a[1] * scale_y + offset_y)
                 dist = np.sqrt((mouse_x - x1)** 2 + (mouse_y - y1)** 2)
@@ -1044,7 +1126,7 @@ class LineEditorCanvas(QWidget):
                     closest_point_idx = 0
                     clicked = True
                 
-                # 端点B
+                # 端点B - 应用当前的偏移量
                 x2 = int(line.point_b[0] * scale_x + offset_x)
                 y2 = int(line.point_b[1] * scale_y + offset_y)
                 dist = np.sqrt((mouse_x - x2)** 2 + (mouse_y - y2)** 2)
@@ -1057,6 +1139,7 @@ class LineEditorCanvas(QWidget):
             # 如果没有点击端点，检查是否点击了线段
             if not clicked:
                 for i, line in enumerate(self.linesegs.linesegments):
+                    # 应用当前的偏移量
                     x1 = int(line.point_a[0] * scale_x + offset_x)
                     y1 = int(line.point_a[1] * scale_y + offset_y)
                     x2 = int(line.point_b[0] * scale_x + offset_x)
@@ -1097,18 +1180,43 @@ class LineEditorCanvas(QWidget):
                     line = self.linesegs.linesegments[closest_line_idx]
                     self.parent_widget.lineSelected.emit(line)
             else:
-                # 没有点击任何线段，清除选中状态
-                self.selected_line_idx = -1
-                self.selected_point_idx = -1
-                if hasattr(self.parent_widget, 'clear_selected_line_info'):
-                    self.parent_widget.clear_selected_line_info()
+                # 没有点击任何线段，检查是否要启动图片拖拽或清除选中状态
+                if event.button() == Qt.LeftButton:
+                    # 如果是左键点击，则启动图片拖拽
+                    self.is_panning = True
+                    self.pan_start_pos = QPoint(mouse_x, mouse_y)
+                    self.pan_start_offset = (self.offset_x, self.offset_y)
+                    return
+                else:
+                    # 清除选中状态
+                    self.selected_line_idx = -1
+                    self.selected_point_idx = -1
+                    if hasattr(self.parent_widget, 'clear_selected_line_info'):
+                        self.parent_widget.clear_selected_line_info()
             
             # 更新画布
             self.update()
     
     def mouseMoveEvent(self, event):
         """鼠标移动事件"""
-        if self.img is None or self.linesegs is None:
+        if self.img is None:
+            return
+        
+        # 如果正在拖动画布
+        if self.is_panning:
+            # 获取鼠标当前位置
+            current_pos = event.pos()
+            
+            # 计算鼠标移动的距离
+            delta_x = current_pos.x() - self.pan_start_pos.x()
+            delta_y = current_pos.y() - self.pan_start_pos.y()
+            
+            # 更新偏移量
+            self.offset_x = self.pan_start_offset[0] + delta_x
+            self.offset_y = self.pan_start_offset[1] + delta_y
+            
+            # 更新画布
+            self.update()
             return
         
         # 如果正在拖动端点
@@ -1117,10 +1225,12 @@ class LineEditorCanvas(QWidget):
             mouse_x = event.x()
             mouse_y = event.y()
             
-            # 使用缓存的缩放比例和偏移量，避免重复计算
+            # 重新计算最新的缩放比例和偏移量，确保使用当前的缩放状态
+            scale_x, scale_y, offset_x, offset_y = self._calculate_scale_and_offset()
+            
             # 计算新的端点位置
-            new_x = (mouse_x - self.last_offset_x - self.click_offset[0]) / self.last_scale_x
-            new_y = (mouse_y - self.last_offset_y - self.click_offset[1]) / self.last_scale_y
+            new_x = (mouse_x - offset_x - self.click_offset[0]) / scale_x
+            new_y = (mouse_y - offset_y - self.click_offset[1]) / scale_y
             
             # 发出位置移动信号
             self.pointMoved.emit(self.selected_line_idx, self.selected_point_idx, (new_x, new_y))
@@ -1132,7 +1242,7 @@ class LineEditorCanvas(QWidget):
             else:
                 line.point_b = (new_x, new_y)
             self.update()  # 立即更新画布
-        else:
+        elif self.linesegs is not None:
             # 更新悬停状态
             self._update_hovered_line(event)
     
@@ -1145,15 +1255,8 @@ class LineEditorCanvas(QWidget):
         mouse_x = event.x()
         mouse_y = event.y()
         
-        # 计算缩放比例和偏移
-        scaled_pixmap = self.img_pixmap.scaled(
-            self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        offset_x = (self.width() - scaled_pixmap.width()) // 2
-        offset_y = (self.height() - scaled_pixmap.height()) // 2
-        
-        scale_x = scaled_pixmap.width() / self.img.shape[1]
-        scale_y = scaled_pixmap.height() / self.img.shape[0]
+        # 计算缩放比例和偏移，使用缓存的缩放信息
+        scale_x, scale_y, offset_x, offset_y = self._calculate_scale_and_offset()
         
         # 检查是否悬停在端点上
         hovered_line_idx = -1
@@ -1163,7 +1266,7 @@ class LineEditorCanvas(QWidget):
             if i == self.selected_line_idx:
                 continue  # 跳过选中的线段
             
-            # 端点A
+            # 端点A - 应用缩放和偏移
             x1 = int(line.point_a[0] * scale_x + offset_x)
             y1 = int(line.point_a[1] * scale_y + offset_y)
             dist = np.sqrt((mouse_x - x1)** 2 + (mouse_y - y1)** 2)
@@ -1171,7 +1274,7 @@ class LineEditorCanvas(QWidget):
                 min_dist = dist
                 hovered_line_idx = i
             
-            # 端点B
+            # 端点B - 应用缩放和偏移
             x2 = int(line.point_b[0] * scale_x + offset_x)
             y2 = int(line.point_b[1] * scale_y + offset_y)
             dist = np.sqrt((mouse_x - x2)** 2 + (mouse_y - y2)** 2)
@@ -1179,7 +1282,7 @@ class LineEditorCanvas(QWidget):
                 min_dist = dist
                 hovered_line_idx = i
             
-            # 线段本身
+            # 线段本身 - 应用缩放和偏移
             dist = self._point_to_line_distance(mouse_x, mouse_y, x1, y1, x2, y2)
             if dist < min_dist and dist <= 5:  # 5像素的容差
                 min_dist = dist
@@ -1195,7 +1298,12 @@ class LineEditorCanvas(QWidget):
         if self.is_dragging and self.selected_line_idx != -1:
             # 拖拽结束时发出信号，用于更新属性面板
             self.dragFinished.emit(self.selected_line_idx)
+        
+        # 结束拖动状态
         self.is_dragging = False
+        
+        # 结束画布拖动状态
+        self.is_panning = False
     
     def save_image(self, file_path):
         """保存画布内容为图片，只包含地图和红色线段，忽略高亮和端点
@@ -1217,22 +1325,18 @@ class LineEditorCanvas(QWidget):
             if directory and not os.path.exists(directory):
                 os.makedirs(directory, exist_ok=True)
             
-            # 创建一个新的图像，只包含地图和红色线段
-            # 计算缩放比例和偏移
-            scaled_pixmap = self.img_pixmap.scaled(
-                self.width(), self.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            
-            # 创建一个与缩放后图像相同大小的QImage
-            result_img = QImage(scaled_pixmap.size(), QImage.Format_RGB32)
-            result_img.fill(Qt.white)  # 白色背景
+            # 创建一个与原始图像相同大小的QImage
+            result_img = QImage(self.img.shape[1], self.img.shape[0], QImage.Format_RGB32)
+            result_img.fill(Qt.black)  # 黑色背景
             
             # 创建QPainter对象用于绘制
             painter = QPainter(result_img)
             painter.setRenderHint(QPainter.Antialiasing)
             
-            # 绘制背景图像
-            painter.drawPixmap(0, 0, scaled_pixmap)
+            # 绘制原始大小的图像
+            painter.drawPixmap(0, 0, self.img_pixmap.scaled(
+                self.img.shape[1], self.img.shape[0], Qt.KeepAspectRatio, Qt.SmoothTransformation
+            ))
             
             # 绘制所有线段，但只使用红色，不绘制端点
             if self.linesegs:
@@ -1240,17 +1344,13 @@ class LineEditorCanvas(QWidget):
                 pen = QPen(QColor(255, 0, 0), 2)  # 红色，2像素宽
                 painter.setPen(pen)
                 
-                # 计算缩放比例
-                scale_x = scaled_pixmap.width() / self.img.shape[1]
-                scale_y = scaled_pixmap.height() / self.img.shape[0]
-                
-                # 绘制所有线段，忽略高亮和端点
+                # 绘制所有线段，忽略高亮和端点，使用原始坐标
                 for line in self.linesegs.linesegments:
-                    # 计算线段端点坐标
-                    x1 = int(line.point_a[0] * scale_x)
-                    y1 = int(line.point_a[1] * scale_y)
-                    x2 = int(line.point_b[0] * scale_x)
-                    y2 = int(line.point_b[1] * scale_y)
+                    # 使用原始坐标绘制线段
+                    x1 = int(line.point_a[0])
+                    y1 = int(line.point_a[1])
+                    x2 = int(line.point_b[0])
+                    y2 = int(line.point_b[1])
                     
                     # 绘制线段（不绘制端点）
                     painter.drawLine(x1, y1, x2, y2)
